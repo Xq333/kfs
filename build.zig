@@ -1,0 +1,15 @@
+const std = @import("std");
+
+pub fn build(b: *std.Build) !void {
+    const optimize = b.standardOptimizeOption(.{
+        .preferred_optimize_mode = .ReleaseSmall,
+    });
+
+    const target = std.Target.Query{ .cpu_arch = .x86_64, .os_tag = .freestanding, .abi = .none };
+
+    const exe = b.addExecutable(.{
+        .name = "kernel",
+        .root_module = b.createModule(.{ .root_source_file = b.path("src/main.zig"), .optimize = optimize, .target = b.resolveTargetQuery(target) }),
+    });
+    b.installArtifact(exe);
+}
