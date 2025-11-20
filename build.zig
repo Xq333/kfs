@@ -8,9 +8,13 @@ pub fn build(b: *std.Build) !void {
     const target = std.Target.Query{ .cpu_arch = .x86_64, .os_tag = .freestanding, .abi = .none };
 
     const exe = b.addExecutable(.{
-        .name = "kernel",
-        .root_module = b.createModule(.{ .root_source_file = b.path("src/main.zig"), .optimize = optimize, .target = b.resolveTargetQuery(target) }),
+        .name = "kernel.elf",
+        .root_module = b.createModule(.{ .root_source_file = b.path("src/kernel/main.zig"), .optimize = optimize, .target = b.resolveTargetQuery(target) }),
     });
+
+    const kernel_bin = exe.getEmittedBin();
+    const install_kernel = b.addInstallFile(kernel_bin, "boot/kernel");
+    b.getInstallStep().dependOn(&install_kernel.step);
 
     // Set linker script for kernel layout
     exe.addLinkerArg("-T");
