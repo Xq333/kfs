@@ -1,7 +1,8 @@
 const std = @import("std");
+const multiboot = @import("multiboot.zig");
 
-pub fn main() !void {
-    const tmp: u32 = undefined;
-    const t2 = @TypeOf(tmp);
-    std.debug.print("Hello, {any}!\n", .{t2});
+export fn _start() callconv(.Naked) noreturn {
+    while (true) {
+        asm volatile ("hlt");
+    }
 }

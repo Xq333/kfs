@@ -11,5 +11,12 @@ pub fn build(b: *std.Build) !void {
         .name = "kernel",
         .root_module = b.createModule(.{ .root_source_file = b.path("src/main.zig"), .optimize = optimize, .target = b.resolveTargetQuery(target) }),
     });
+
+    // Set linker script for kernel layout
+    exe.addLinkerArg("-T");
+    exe.addLinkerArg(b.path("linker.ld").getPath(b));
+
+    exe.root_module.strip = true;
+
     b.installArtifact(exe);
 }
