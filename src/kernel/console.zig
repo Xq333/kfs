@@ -1,9 +1,14 @@
 const std = @import("std");
-const console = @import("console.zig");
 
 const VGA_WIDTH = 80;
 const VGA_HEIGHT = 25;
 const VGA_SIZE = VGA_WIDTH * VGA_HEIGHT;
+
+// VGA hardware cursor I/O ports
+const VGA_CTRL_REGISTER = 0x3D4;
+const VGA_DATA_REGISTER = 0x3D5;
+const VGA_CURSOR_HIGH = 0x0E;
+const VGA_CURSOR_LOW = 0x0F;
 
 var g_row: usize = 0;
 var g_column: usize = 0;
@@ -46,16 +51,86 @@ const Color = packed struct(u8) {
 /// Initialize VGA
 pub fn init() void {
     clear();
+    enableCursor();
+    updateCursor();
+}
+
+/// Update hardware cursor position
+fn updateCursor() void {
+    const pos: u16 = @intCast(g_row * VGA_WIDTH + g_column);
+
+    // Send high byte
+    outb(VGA_CTRL_REGISTER, VGA_CURSOR_HIGH);
+    outb(VGA_DATA_REGISTER, @intCast((pos >> 8) & 0xFF));
+
+    // Send low byte
+    outb(VGA_CTRL_REGISTER, VGA_CURSOR_LOW);
+    outb(VGA_DATA_REGISTER, @intCast(pos & 0xFF));
+}
+
+/// Enable hardware cursor
+pub fn enableCursor() void {
+    outb(VGA_CTRL_REGISTER, 0x0A);
+    const cursor_start = inb(VGA_DATA_REGISTER) & 0xC0;
+    outb(VGA_DATA_REGISTER, cursor_start | 0); // Cursor start line
+
+    outb(VGA_CTRL_REGISTER, 0x0B);
+    const cursor_end = inb(VGA_DATA_REGISTER) & 0xE0;
+    outb(VGA_DATA_REGISTER, cursor_end | 15); // Cursor end line
+
+    updateCursor();
+}
+
+/// Disable hardware cursor
+pub fn disableCursor() void {
+    outb(VGA_CTRL_REGISTER, 0x0A);
+    outb(VGA_DATA_REGISTER, 0x20);
+}
+
+/// Output byte to I/O port
+inline fn outb(port: u16, value: u8) void {
+    asm volatile ("outb %[value], %[port]"
+        :
+        : [value] "{al}" (value),
+          [port] "N{dx}" (port),
+    );
+}
+
+/// Input byte from I/O port
+inline fn inb(port: u16) u8 {
+    return asm volatile ("inb %[port], %[result]"
+        : [result] "={al}" (-> u8),
+        : [port] "N{dx}" (port),
+    );
 }
 
 /// Set Color for VGA
-pub fn setColor(fg: Color, bg: Color) void {
+pub fn setColor(fg: ColorType, bg: ColorType) void {
     g_color = Color.init(fg, bg);
+}
+
+/// Print with color
+pub fn printColored(comptime fmt: []const u8, args: anytype, fg: ColorType, bg: ColorType) void {
+    const old_color = g_color;
+    setColor(fg, bg);
+    print(fmt, args);
+    g_color = old_color;
+}
+
+/// Print string with color
+pub fn printStringColored(str: []const u8, fg: ColorType, bg: ColorType) void {
+    const old_color = g_color;
+    setColor(fg, bg);
+    printString(str);
+    g_color = old_color;
 }
 
 /// Clear the screen
 pub fn clear() void {
     @memset(g_buffer[0..VGA_SIZE], Color.getVgaChar(g_color, ' '));
+    g_row = 0;
+    g_column = 0;
+    updateCursor();
 }
 
 /// Print character with color at specific position
@@ -64,11 +139,31 @@ pub fn printCharAt(char: u8, color: Color, x: usize, y: usize) void {
     g_buffer[index] = color.getVgaChar(char);
 }
 
-/// INFO: Scrolling is left as an exercise for the reader
-fn checkAndScroll() void {
-    if (g_row == VGA_HEIGHT) {
-        g_row = 0;
+/// Scroll the screen up by one line
+fn scroll() void {
+    // Move all lines up by one
+    var i: usize = 0;
+    while (i < (VGA_HEIGHT - 1) * VGA_WIDTH) : (i += 1) {
+        g_buffer[i] = g_buffer[i + VGA_WIDTH];
     }
+
+    // Clear the last line
+    const last_line_start = (VGA_HEIGHT - 1) * VGA_WIDTH;
+    i = 0;
+    while (i < VGA_WIDTH) : (i += 1) {
+        g_buffer[last_line_start + i] = Color.getVgaChar(g_color, ' ');
+    }
+
+    // Reset row back to last line
+    g_row = VGA_HEIGHT - 1;
+}
+
+/// Check if scrolling is needed and scroll if necessary
+fn checkAndScroll() void {
+    if (g_row >= VGA_HEIGHT) {
+        scroll();
+    }
+    updateCursor();
 }
 
 /// Print character to the VGA
@@ -79,13 +174,35 @@ pub fn printChar(char: u8) void {
             g_row += 1;
             checkAndScroll();
         },
+        '\r' => {
+            g_column = 0;
+            updateCursor();
+        },
+        '\t' => {
+            // Tab stops at every 4 characters
+            const tab_width = 4;
+            const spaces = tab_width - (g_column % tab_width);
+            var i: usize = 0;
+            while (i < spaces) : (i += 1) {
+                printChar(' ');
+            }
+        },
+        '\x08' => { // Backspace
+            if (g_column > 0) {
+                g_column -= 1;
+                printCharAt(' ', g_color, g_column, g_row);
+                updateCursor();
+            }
+        },
         else => {
             printCharAt(char, g_color, g_column, g_row);
             g_column += 1;
-            if (g_column == VGA_WIDTH) {
+            if (g_column >= VGA_WIDTH) {
                 g_column = 0;
                 g_row += 1;
                 checkAndScroll();
+            } else {
+                updateCursor();
             }
         },
     }

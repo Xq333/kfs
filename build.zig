@@ -5,7 +5,7 @@ pub fn build(b: *std.Build) !void {
         .preferred_optimize_mode = .ReleaseSmall,
     });
 
-    const target = std.Target.Query{ .cpu_arch = .x86_64, .os_tag = .freestanding, .abi = .none };
+    const target = std.Target.Query{ .cpu_arch = .x86, .os_tag = .freestanding, .abi = .none };
 
     const exe = b.addExecutable(.{
         .name = "kernel.elf",
@@ -17,8 +17,7 @@ pub fn build(b: *std.Build) !void {
     b.getInstallStep().dependOn(&install_kernel.step);
 
     // Set linker script for kernel layout
-    exe.addLinkerArg("-T");
-    exe.addLinkerArg(b.path("linker.ld").getPath(b));
+    exe.setLinkerScript(b.path("linker.ld"));
 
     exe.root_module.strip = true;
 
