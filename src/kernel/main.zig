@@ -1,5 +1,6 @@
 const std = @import("std");
 const console = @import("console.zig");
+const print = @import("print.zig");
 
 const MB_HEADER_MAGIC = 0x1BADB002;
 const MB_FLAG_ALIGN = 1 << 0;
@@ -85,7 +86,7 @@ noinline fn kmain() callconv(.c) noreturn {
     console.print(" Multiboot loaded successfully\n", .{});
 
     console.print("\n", .{});
-    console.printColored("  Status: ", .{}, .light_brown, .black);
+    console.printColored("  Status: ", .{}, .yellow, .black);
     console.printColored("System is idle and halted\n", .{}, .light_gray, .black);
     console.print("\n", .{});
 
@@ -94,28 +95,28 @@ noinline fn kmain() callconv(.c) noreturn {
     console.printColored("Red ", .{}, .red, .black);
     console.printColored("Green ", .{}, .green, .black);
     console.printColored("Blue ", .{}, .blue, .black);
-    console.printColored("Yellow ", .{}, .light_brown, .black);
+    console.printColored("Yellow ", .{}, .yellow, .black);
     console.printColored("Magenta ", .{}, .magenta, .black);
     console.printColored("Cyan", .{}, .cyan, .black);
     console.print("\n\n", .{});
 
     // Scroll test - print many lines to demonstrate scrolling
-    console.printColored("  Scroll Test:\n", .{}, .light_brown, .black);
-    console.printColored("  Scroll Test:\n", .{}, .light_brown, .black);
-    console.printColored("  Scroll Test:\n", .{}, .light_brown, .black);
-    console.printColored("  Scroll Test:\n", .{}, .light_brown, .black);
-    console.printColored("  Scroll Test:\n", .{}, .light_brown, .black);
-    console.printColored("  Scroll Test:\n", .{}, .light_brown, .black);
-    console.printColored("  Scroll Test:\n", .{}, .light_brown, .black);
-    console.printColored("  Scroll Test:\n", .{}, .light_brown, .black);
-    console.printColored("  Scroll Test:\n", .{}, .light_brown, .black);
-    console.printColored("  Scroll Test:\n", .{}, .light_brown, .black);
-    console.printColored("  Scroll Test:\n", .{}, .light_brown, .black);
-    console.printColored("  Scroll Test:\n", .{}, .light_brown, .black);
-    console.printColored("  Scroll Test:\n", .{}, .light_brown, .black);
-    console.printColored("  Scroll Test:\n", .{}, .light_brown, .black);
-    console.printColored("  Scroll Test:\n", .{}, .light_brown, .black);
-    console.printColored("  Scroll Test:\n", .{}, .light_brown, .black);
+    console.printColored("  Scroll Test:\n", .{}, .yellow, .black);
+    console.printColored("  Scroll Test:\n", .{}, .yellow, .black);
+    console.printColored("  Scroll Test:\n", .{}, .yellow, .black);
+    console.printColored("  Scroll Test:\n", .{}, .yellow, .black);
+    console.printColored("  Scroll Test:\n", .{}, .yellow, .black);
+    console.printColored("  Scroll Test:\n", .{}, .yellow, .black);
+    console.printColored("  Scroll Test:\n", .{}, .yellow, .black);
+    console.printColored("  Scroll Test:\n", .{}, .yellow, .black);
+    console.printColored("  Scroll Test:\n", .{}, .yellow, .black);
+    console.printColored("  Scroll Test:\n", .{}, .yellow, .black);
+    console.printColored("  Scroll Test:\n", .{}, .yellow, .black);
+    console.printColored("  Scroll Test:\n", .{}, .yellow, .black);
+    console.printColored("  Scroll Test:\n", .{}, .yellow, .black);
+    console.printColored("  Scroll Test:\n", .{}, .yellow, .black);
+    console.printColored("  Scroll Test:\n", .{}, .yellow, .black);
+    console.printColored("  Scroll Test:\n", .{}, .yellow, .black);
 
     while (true) {
         asm volatile ("hlt");

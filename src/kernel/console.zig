@@ -1,49 +1,28 @@
 const std = @import("std");
-
-const VGA_WIDTH = 80;
-const VGA_HEIGHT = 25;
-const VGA_SIZE = VGA_WIDTH * VGA_HEIGHT;
-
-// VGA hardware cursor I/O ports
-const VGA_CTRL_REGISTER = 0x3D4;
-const VGA_DATA_REGISTER = 0x3D5;
-const VGA_CURSOR_HIGH = 0x0E;
-const VGA_CURSOR_LOW = 0x0F;
+const colors = @import("colors.zig");
+const vga = @import("vga.zig");
 
 var g_row: usize = 0;
 var g_column: usize = 0;
 var g_color: Color = .init(.light_gray, .black);
-var g_buffer = @as([*]volatile u16, @ptrFromInt(0xB8000));
+var g_buffer = @as([*]volatile u16, @ptrFromInt(vga.BUFFER_ADDR));
 
-pub const ColorType = enum(u4) {
-    black = 0,
-    blue = 1,
-    green = 2,
-    cyan = 3,
-    red = 4,
-    magenta = 5,
-    brown = 6,
-    light_gray = 7,
-    dark_gray = 8,
-    light_blue = 9,
-    light_green = 10,
-    light_cyan = 11,
-    light_red = 12,
-    light_magenta = 13,
-    light_brown = 14,
-    white = 15,
-};
+// Re-export Color from colors module for convenience
+pub const ColorType = colors.Color;
 
 const Color = packed struct(u8) {
-    fg: ColorType,
-    bg: ColorType,
+    fg: u4,
+    bg: u4,
 
     pub fn init(fg: ColorType, bg: ColorType) Color {
-        return .{ .fg = fg, .bg = bg };
+        return .{
+            .fg = @intCast(@intFromEnum(fg) & 0x0F),
+            .bg = @intCast(@intFromEnum(bg) & 0x0F),
+        };
     }
 
     /// Combine vga color and char. The upper byte will be color and lower byte will be character
-    pub fn getVgaChar(self: Color, char: u8) u16 {
+    pub inline fn getVgaChar(self: Color, char: u8) u16 {
         return @as(u16, @as(u8, @bitCast(self))) << 8 | char;
     }
 };
@@ -51,57 +30,13 @@ const Color = packed struct(u8) {
 /// Initialize VGA
 pub fn init() void {
     clear();
-    enableCursor();
+    vga.enableCursor();
     updateCursor();
 }
 
 /// Update hardware cursor position
 fn updateCursor() void {
-    const pos: u16 = @intCast(g_row * VGA_WIDTH + g_column);
-
-    // Send high byte
-    outb(VGA_CTRL_REGISTER, VGA_CURSOR_HIGH);
-    outb(VGA_DATA_REGISTER, @intCast((pos >> 8) & 0xFF));
-
-    // Send low byte
-    outb(VGA_CTRL_REGISTER, VGA_CURSOR_LOW);
-    outb(VGA_DATA_REGISTER, @intCast(pos & 0xFF));
-}
-
-/// Enable hardware cursor
-pub fn enableCursor() void {
-    outb(VGA_CTRL_REGISTER, 0x0A);
-    const cursor_start = inb(VGA_DATA_REGISTER) & 0xC0;
-    outb(VGA_DATA_REGISTER, cursor_start | 0); // Cursor start line
-
-    outb(VGA_CTRL_REGISTER, 0x0B);
-    const cursor_end = inb(VGA_DATA_REGISTER) & 0xE0;
-    outb(VGA_DATA_REGISTER, cursor_end | 15); // Cursor end line
-
-    updateCursor();
-}
-
-/// Disable hardware cursor
-pub fn disableCursor() void {
-    outb(VGA_CTRL_REGISTER, 0x0A);
-    outb(VGA_DATA_REGISTER, 0x20);
-}
-
-/// Output byte to I/O port
-inline fn outb(port: u16, value: u8) void {
-    asm volatile ("outb %[value], %[port]"
-        :
-        : [value] "{al}" (value),
-          [port] "N{dx}" (port),
-    );
-}
-
-/// Input byte from I/O port
-inline fn inb(port: u16) u8 {
-    return asm volatile ("inb %[port], %[result]"
-        : [result] "={al}" (-> u8),
-        : [port] "N{dx}" (port),
-    );
+    vga.updateCursor(g_row, g_column);
 }
 
 /// Set Color for VGA
@@ -109,25 +44,13 @@ pub fn setColor(fg: ColorType, bg: ColorType) void {
     g_color = Color.init(fg, bg);
 }
 
-/// Print with color
-pub fn printColored(comptime fmt: []const u8, args: anytype, fg: ColorType, bg: ColorType) void {
-    const old_color = g_color;
-    setColor(fg, bg);
-    print(fmt, args);
-    g_color = old_color;
-}
-
-/// Print string with color
-pub fn printStringColored(str: []const u8, fg: ColorType, bg: ColorType) void {
-    const old_color = g_color;
-    setColor(fg, bg);
-    printString(str);
-    g_color = old_color;
-}
-
 /// Clear the screen
 pub fn clear() void {
-    @memset(g_buffer[0..VGA_SIZE], Color.getVgaChar(g_color, ' '));
+    const blank_char = Color.getVgaChar(g_color, ' ');
+    var i: usize = 0;
+    while (i < vga.SIZE) : (i += 1) {
+        g_buffer[i] = blank_char;
+    }
     g_row = 0;
     g_column = 0;
     updateCursor();
@@ -135,32 +58,35 @@ pub fn clear() void {
 
 /// Print character with color at specific position
 pub fn printCharAt(char: u8, color: Color, x: usize, y: usize) void {
-    const index = y * VGA_WIDTH + x;
+    const index = y * vga.WIDTH + x;
     g_buffer[index] = color.getVgaChar(char);
 }
 
 /// Scroll the screen up by one line
 fn scroll() void {
     // Move all lines up by one
+    const lines_to_move = vga.HEIGHT - 1;
+    const copy_size = lines_to_move * vga.WIDTH;
     var i: usize = 0;
-    while (i < (VGA_HEIGHT - 1) * VGA_WIDTH) : (i += 1) {
-        g_buffer[i] = g_buffer[i + VGA_WIDTH];
+    while (i < copy_size) : (i += 1) {
+        g_buffer[i] = g_buffer[i + vga.WIDTH];
     }
 
     // Clear the last line
-    const last_line_start = (VGA_HEIGHT - 1) * VGA_WIDTH;
-    i = 0;
-    while (i < VGA_WIDTH) : (i += 1) {
-        g_buffer[last_line_start + i] = Color.getVgaChar(g_color, ' ');
+    const last_line_start = lines_to_move * vga.WIDTH;
+    const blank_char = Color.getVgaChar(g_color, ' ');
+    i = last_line_start;
+    while (i < vga.SIZE) : (i += 1) {
+        g_buffer[i] = blank_char;
     }
 
     // Reset row back to last line
-    g_row = VGA_HEIGHT - 1;
+    g_row = lines_to_move;
 }
 
 /// Check if scrolling is needed and scroll if necessary
 fn checkAndScroll() void {
-    if (g_row >= VGA_HEIGHT) {
+    if (g_row >= vga.HEIGHT) {
         scroll();
     }
     updateCursor();
@@ -182,9 +108,19 @@ pub fn printChar(char: u8) void {
             // Tab stops at every 4 characters
             const tab_width = 4;
             const spaces = tab_width - (g_column % tab_width);
+            const space_char = Color.getVgaChar(g_color, ' ');
             var i: usize = 0;
             while (i < spaces) : (i += 1) {
-                printChar(' ');
+                if (g_column >= vga.WIDTH) break;
+                g_buffer[g_row * vga.WIDTH + g_column] = space_char;
+                g_column += 1;
+            }
+            if (g_column >= vga.WIDTH) {
+                g_column = 0;
+                g_row += 1;
+                checkAndScroll();
+            } else {
+                updateCursor();
             }
         },
         '\x08' => { // Backspace
@@ -197,7 +133,7 @@ pub fn printChar(char: u8) void {
         else => {
             printCharAt(char, g_color, g_column, g_row);
             g_column += 1;
-            if (g_column >= VGA_WIDTH) {
+            if (g_column >= vga.WIDTH) {
                 g_column = 0;
                 g_row += 1;
                 checkAndScroll();
@@ -208,12 +144,26 @@ pub fn printChar(char: u8) void {
     }
 }
 
+/// Print string to VGA
+pub fn printString(str: []const u8) void {
+    for (str) |char| {
+        printChar(char);
+    }
+}
+
+/// Print with color
+pub fn printColored(comptime fmt: []const u8, args: anytype, fg: ColorType, bg: ColorType) void {
+    const old_color = g_color;
+    setColor(fg, bg);
+    print(fmt, args);
+    g_color = old_color;
+}
+
 /// Implementation of std.Io.Writer.vtable.drain function.
 /// When flush is called or the writer buffer is full this function is called.
 /// This function first writes all data of writer buffer after that it writes
 /// the argument data in which the last element is written splat times.
 fn drain(w: *std.Io.Writer, data: []const []const u8, splat: usize) !usize {
-    // the length of data must not be zero
     std.debug.assert(data.len != 0);
 
     var consumed: usize = 0;
@@ -232,7 +182,7 @@ fn drain(w: *std.Io.Writer, data: []const []const u8, splat: usize) !usize {
         consumed += bytes.len;
     }
 
-    // If out patter (i.e. last element of data) is non zero len then write splat times
+    // If pattern (i.e. last element of data) is non zero len then write splat times
     switch (pattern.len) {
         0 => {},
         else => {
@@ -241,7 +191,6 @@ fn drain(w: *std.Io.Writer, data: []const []const u8, splat: usize) !usize {
             }
         },
     }
-    // Now we have to return how many bytes we consumed from data
     consumed += splat_len;
     return consumed;
 }
@@ -255,13 +204,6 @@ pub fn writer(buffer: []u8) std.Io.Writer {
             .drain = drain,
         },
     };
-}
-
-/// Print string to VGA
-pub fn printString(str: []const u8) void {
-    for (str) |char| {
-        printChar(char);
-    }
 }
 
 /// Print with standard zig format to VGA

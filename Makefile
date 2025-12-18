@@ -13,8 +13,8 @@ RESET = \033[0m
 
 .PHONY: all build iso run re clean fclean help
 
-# Default target - build and stage kernel for GRUB
-all: build
+# Default target - build and stage kernel for GRUB 
+all: run
 
 build:
 	@echo "$(CYAN)Building kernel via build.zig...$(RESET)"
