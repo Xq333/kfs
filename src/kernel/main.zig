@@ -1,6 +1,7 @@
 const std = @import("std");
-const console = @import("console.zig");
-const print = @import("print.zig");
+const console = @import("io/console.zig");
+const print = @import("lib/print.zig");
+const keyboard = @import("drivers/keyboard.zig");
 
 const MB_HEADER_MAGIC = 0x1BADB002;
 const MB_FLAG_ALIGN = 1 << 0;
@@ -33,26 +34,12 @@ export fn _start() callconv(.naked) noreturn {
         \\ movl %%esp, %%ebp
         \\ call %[kmain:P]
         :
-        // The stack grows downwards on x86, so we need to point ESP register
-        // to one element past the end of `stack_bytes`.
-        //
-        // Unfortunately, we can't just compute `&stack_bytes[stack_bytes.len]`,
-        // as the Zig compiler will notice the out-of-bounds access at
-        // compile-time and throw an error. We can instead take the start address
-        // of `stack_bytes` then convert into "multi-pointers" `[*]` where zig
-        // allows pointer arithmetic and get the &stack_bytes[stack_bytes.len]
-        //
-        // Finally, we pass the whole expression as an input operand with the
-        // "immediate" constraint to force the compiler to encode this as an
-        // absolute address. This prevents the compiler from doing unnecessary
-        // extra steps to compute the address at runtime (especially in Debug mode),
-        // which could possibly clobber registers that are specified by multiboot
-        // to hold special values (e.g. EAX).
         : [stack_top] "i" (&@as([*]align(16) u8, @ptrCast(&stack_bytes))[stack_bytes.len]),
-          // We let the compiler handle the reference to kmain by passing it as an input operand as well.
           [kmain] "X" (&kmain),
     );
 }
+
+fn helloWorld() noreturn {}
 
 // We use noinline to make sure it doesn't get inlined by compiler
 noinline fn kmain() callconv(.c) noreturn {
