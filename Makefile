@@ -36,12 +36,12 @@ iso: build
 # Run kernel in QEMU
 run: iso
 	@echo "$(CYAN)Starting QEMU...$(RESET)"
-	@qemu-system-x86_64 -cdrom $(ISO_FILE)
+	@qemu-system-i386 -cdrom $(ISO_FILE)
 
 # Quick run without ISO (direct kernel boot)
 run-kernel: build
 	@echo "$(CYAN)Starting QEMU with direct kernel boot...$(RESET)"
-	@qemu-system-x86_64 -kernel $(KERNEL_BIN)
+	@qemu-system-i386 -kernel $(KERNEL_BIN)
 
 # Rebuild - removes old files and rebuilds
 re: fclean all
