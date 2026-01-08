@@ -1,5 +1,8 @@
 const console = @import("io/console.zig");
 const keyboard = @import("drivers/keyboard.zig");
+const gdt = @import("arch/gdt.zig");
+const idt = @import("arch/idt.zig");
+const pic = @import("arch/pic.zig");
 
 // ============================================================================
 // Multiboot Header
@@ -42,6 +45,12 @@ export fn _start() callconv(.naked) noreturn {
 // Initialization
 // ============================================================================
 
+fn initArch() void {
+    gdt.init();
+    idt.init();
+    pic.init();
+}
+
 fn initDrivers() void {
     console.init();
     keyboard.init();
@@ -65,10 +74,17 @@ fn printBanner() void {
 }
 
 fn printBootInfo() void {
-    printStatus("Kernel initialized");
-    printStatus("VGA text mode active");
-    printStatus("Multiboot loaded");
-    printStatus("Keyboard driver ready");
+    printStatus("GDT initialized");
+    printStatus("IDT initialized");
+    printStatus("PIC configured");
+    if (keyboard.isInitialized()) {
+        printStatus("Keyboard IRQ handler registered");
+    } else {
+        console.printColored("  [", .{}, .white, .black);
+        console.printColored("FAIL", .{}, .red, .black);
+        console.printColored("]", .{}, .white, .black);
+        console.print(" Keyboard IRQ handler NOT registered\n", .{});
+    }
     console.print("\n", .{});
 }
 
@@ -77,16 +93,26 @@ fn printBootInfo() void {
 // ============================================================================
 
 noinline fn kmain() callconv(.c) noreturn {
+    // Initialize architecture (GDT, IDT, PIC)
+    initArch();
+
+    // Initialize drivers
     initDrivers();
+
+    // Display boot info
     printBanner();
     printBootInfo();
 
     // Prompt
     console.printColored("  > ", .{}, .light_green, .black);
 
-    // Main loop: poll keyboard and print characters
+    // Enable interrupts
+    idt.enableInterrupts();
+
+    // Main loop: hlt until interrupt, then check for input
     while (true) {
-        if (keyboard.getChar()) |char| {
+        asm volatile ("hlt");
+        while (keyboard.getChar()) |char| {
             console.printChar(char);
         }
     }
