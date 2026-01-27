@@ -2,6 +2,7 @@
 // Defines memory segments for protected mode
 
 const vga = @import("../drivers/vga.zig");
+const syslog = @import("../ui/syslog.zig");
 
 // ============================================================================
 // Types
@@ -73,6 +74,8 @@ pub fn init() void {
     };
 
     loadGdt();
+
+    syslog.ok("GDT loaded (5 entries: null, kcode, kdata, ucode, udata)");
 }
 
 // ============================================================================

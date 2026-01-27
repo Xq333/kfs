@@ -2,6 +2,7 @@
 // Handles hardware interrupt routing
 
 const vga = @import("../drivers/vga.zig");
+const syslog = @import("../ui/syslog.zig");
 
 // ============================================================================
 // Constants
@@ -60,6 +61,9 @@ pub fn init() void {
     // Mask all interrupts except keyboard (IRQ1)
     vga.outb(PIC1_DATA, 0xFD); // 11111101 - only IRQ1 enabled
     vga.outb(PIC2_DATA, 0xFF); // All masked
+
+    syslog.ok("PIC remapped (IRQ 0-15 -> INT 32-47)");
+    syslog.ok("IRQ1 (keyboard) unmasked");
 }
 
 /// Send End-Of-Interrupt signal

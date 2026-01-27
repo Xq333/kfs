@@ -1,6 +1,8 @@
 // Interrupt Descriptor Table (IDT)
 // Sets up CPU interrupt/exception handlers for x86
 
+const syslog = @import("../ui/syslog.zig");
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -109,6 +111,8 @@ pub fn init() void {
         :
         : [idt_ptr] "r" (&idt_ptr),
     );
+
+    syslog.ok("IDT loaded (256 interrupt gates)");
 }
 
 pub fn enableInterrupts() void {

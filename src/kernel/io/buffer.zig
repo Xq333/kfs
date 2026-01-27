@@ -23,7 +23,11 @@ pub const Color = packed struct(u8) {
     }
 };
 
-var g_row: usize = 0;
+// Header takes row 0, content starts at row 1
+const CONTENT_START_ROW: usize = 1;
+const CONTENT_HEIGHT: usize = vga.HEIGHT - CONTENT_START_ROW;
+
+var g_row: usize = CONTENT_START_ROW;
 var g_column: usize = 0;
 var g_color: Color = .init(.light_gray, .black);
 var g_buffer = @as([*]volatile u16, @ptrFromInt(vga.BUFFER_ADDR));
@@ -66,11 +70,12 @@ pub fn getBg() ColorType {
 
 pub fn clear() void {
     const blank_char = Color.getVgaChar(g_color, ' ');
-    var i: usize = 0;
+    // Only clear content area (row 1 onwards), leave header (row 0) intact
+    var i: usize = CONTENT_START_ROW * vga.WIDTH;
     while (i < vga.SIZE) : (i += 1) {
         g_buffer[i] = blank_char;
     }
-    g_row = 0;
+    g_row = CONTENT_START_ROW;
     g_column = 0;
     updateCursor();
 }
@@ -85,21 +90,26 @@ pub fn writeCharAt(char: u8, color: Color, x: usize, y: usize) void {
 }
 
 fn scroll() void {
-    const lines_to_move = vga.HEIGHT - 1;
+    // Only scroll content area (rows 1-24), leave header (row 0) intact
+    const content_start = CONTENT_START_ROW * vga.WIDTH;
+    const lines_to_move = CONTENT_HEIGHT - 1;
     const copy_size = lines_to_move * vga.WIDTH;
+
+    // Move lines up within content area
     var i: usize = 0;
     while (i < copy_size) : (i += 1) {
-        g_buffer[i] = g_buffer[i + vga.WIDTH];
+        g_buffer[content_start + i] = g_buffer[content_start + i + vga.WIDTH];
     }
 
-    const last_line_start = lines_to_move * vga.WIDTH;
+    // Clear last line
+    const last_line_start = (vga.HEIGHT - 1) * vga.WIDTH;
     const blank_char = Color.getVgaChar(g_color, ' ');
     i = last_line_start;
     while (i < vga.SIZE) : (i += 1) {
         g_buffer[i] = blank_char;
     }
 
-    g_row = lines_to_move;
+    g_row = vga.HEIGHT - 1;
 }
 
 fn checkAndScroll() void {

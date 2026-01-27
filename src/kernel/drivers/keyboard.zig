@@ -3,6 +3,8 @@
 
 const vga = @import("vga.zig");
 const isr = @import("../arch/isr.zig");
+const screen = @import("../io/screen.zig");
+const syslog = @import("../ui/syslog.zig");
 
 // ============================================================================
 // Constants
@@ -18,6 +20,10 @@ const SC_LEFT_SHIFT: u8 = 0x2A;
 const SC_RIGHT_SHIFT: u8 = 0x36;
 const SC_CAPS_LOCK: u8 = 0x3A;
 const SC_LEFT_CTRL: u8 = 0x1D;
+
+// Function keys (F1-F5 for screen switching)
+const SC_F1: u8 = 0x3B;
+const SC_F5: u8 = 0x3F;
 
 // ============================================================================
 // Scancode Tables (US QWERTY - Set 1)
@@ -79,6 +85,8 @@ pub fn init() void {
 
     // Register keyboard IRQ handler (IRQ1)
     isr.registerIrqHandler(1, keyboardIrqHandler);
+
+    syslog.ok("PS/2 keyboard driver loaded");
 }
 
 /// Get character from buffer (non-blocking)
@@ -165,6 +173,11 @@ fn handleKeyPress(scancode: u8) ?u8 {
         },
         SC_LEFT_CTRL => {
             ctrl_pressed = true;
+            return null;
+        },
+        // F1-F5: Switch screens
+        SC_F1...SC_F5 => {
+            screen.switchTo(scancode - SC_F1);
             return null;
         },
         else => {},
