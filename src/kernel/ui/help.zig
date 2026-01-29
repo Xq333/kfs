@@ -50,4 +50,7 @@ pub fn draw() void {
 
     console.printColored("    halt", .{}, .light_green, .black);
     console.print("   - Halt the CPU\n", .{});
+
+    console.printColored("    sdump", .{}, .light_green, .black);
+    console.print("  - Dump entire kernel stack memory\n", .{});
 }

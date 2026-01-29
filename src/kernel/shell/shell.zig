@@ -1,6 +1,3 @@
-// Minimalistic Shell for debugging
-// Commands: help, clear, stack, reboot, halt, echo, gdt, time
-
 const console = @import("../io/console.zig");
 const kstack = @import("../arch/stack.zig");
 const gdt = @import("../arch/gdt.zig");
@@ -169,73 +166,126 @@ fn cmdInfo() void {
     console.print("\n", .{});
 }
 
+// Static buffer to avoid stack allocation in sdump
+var sdump_ascii_buf: [16]u8 = undefined;
+
 fn cmdStackDump() void {
-    console.print("\n", .{});
+    console.printChar('\n');
     console.printColored("  Kernel Stack Dump:\n", .{}, .yellow, .black);
 
-    // Get current frame address as ESP estimate
-    const esp: u32 = @truncate(@frameAddress());
+    // Get current ESP via inline assembly
+    var esp: u32 = undefined;
+    asm volatile ("mov %%esp, %[esp]"
+        : [esp] "=r" (esp),
+    );
 
     const stack_bottom = kstack.stackBottomAddr();
     const stack_top = kstack.stackTopAddr();
 
-    console.print("  ESP:  0x", .{});
+    console.printString("  ESP:  0x");
     printHex32(esp);
-    console.print("\n", .{});
-    console.print("  Top:  0x", .{});
+    console.printChar('\n');
+    console.printString("  Top:  0x");
     printHex32(stack_top);
-    console.print("\n", .{});
-    console.print("  Bot:  0x", .{});
+    console.printChar('\n');
+    console.printString("  Bot:  0x");
     printHex32(stack_bottom);
-    console.print("\n\n", .{});
+    console.printString("\n\n");
 
-    // Dump stack memory with paging
-    console.printColored("  Offset   Address     Value      ASCII\n", .{}, .cyan, .black);
-    console.print("  ------------------------------------------\n", .{});
+    // Dump with 16 bytes per row
+    console.printColored("  Address     +0       +4       +8       +C         ASCII\n", .{}, .cyan, .black);
+    console.printString("  -------------------------------------------------------------------\n");
 
-    var offset: u32 = 0;
+    var addr: u32 = esp;
     var lines: u32 = 0;
-    const lines_per_page: u32 = 14; // Lines before prompting
+    const lines_per_page: u32 = 16;
 
-    while (esp +% offset < stack_top) {
-        const addr = esp +% offset;
-
-        // Print offset
-        console.print("  +", .{});
-        printHex8(@truncate(offset));
-        console.print("    0x", .{});
+    while (addr < stack_top) {
+        console.printString("  0x");
         printHex32(addr);
-        console.print("  ", .{});
 
-        // Read and print value
-        const ptr: *const u32 = @ptrFromInt(addr);
-        const val = ptr.*;
-        printHex32(val);
-        console.print("   |", .{});
+        // Read 4 dwords and store bytes for ASCII
+        var byte_count: usize = 0;
 
-        // ASCII for 4 bytes
-        const b0: u8 = @truncate(val);
-        const b1: u8 = @truncate(val >> 8);
-        const b2: u8 = @truncate(val >> 16);
-        const b3: u8 = @truncate(val >> 24);
+        // Column 0
+        if (addr < stack_top) {
+            const ptr: *const volatile u32 = @ptrFromInt(addr);
+            const val = ptr.*;
+            console.printString("  ");
+            printHex32(val);
+            sdump_ascii_buf[0] = @truncate(val);
+            sdump_ascii_buf[1] = @truncate(val >> 8);
+            sdump_ascii_buf[2] = @truncate(val >> 16);
+            sdump_ascii_buf[3] = @truncate(val >> 24);
+            byte_count = 4;
+        }
 
-        printAsciiChar(b0);
-        printAsciiChar(b1);
-        printAsciiChar(b2);
-        printAsciiChar(b3);
-        console.print("|\n", .{});
+        // Column 1
+        if (addr +% 4 < stack_top) {
+            const ptr: *const volatile u32 = @ptrFromInt(addr +% 4);
+            const val = ptr.*;
+            console.printChar(' ');
+            printHex32(val);
+            sdump_ascii_buf[4] = @truncate(val);
+            sdump_ascii_buf[5] = @truncate(val >> 8);
+            sdump_ascii_buf[6] = @truncate(val >> 16);
+            sdump_ascii_buf[7] = @truncate(val >> 24);
+            byte_count = 8;
+        } else {
+            console.printString("          ");
+        }
 
-        offset += 4;
+        // Column 2
+        if (addr +% 8 < stack_top) {
+            const ptr: *const volatile u32 = @ptrFromInt(addr +% 8);
+            const val = ptr.*;
+            console.printChar(' ');
+            printHex32(val);
+            sdump_ascii_buf[8] = @truncate(val);
+            sdump_ascii_buf[9] = @truncate(val >> 8);
+            sdump_ascii_buf[10] = @truncate(val >> 16);
+            sdump_ascii_buf[11] = @truncate(val >> 24);
+            byte_count = 12;
+        } else {
+            console.printString("          ");
+        }
+
+        // Column 3
+        if (addr +% 12 < stack_top) {
+            const ptr: *const volatile u32 = @ptrFromInt(addr +% 12);
+            const val = ptr.*;
+            console.printChar(' ');
+            printHex32(val);
+            sdump_ascii_buf[12] = @truncate(val);
+            sdump_ascii_buf[13] = @truncate(val >> 8);
+            sdump_ascii_buf[14] = @truncate(val >> 16);
+            sdump_ascii_buf[15] = @truncate(val >> 24);
+            byte_count = 16;
+        } else {
+            console.printString("          ");
+        }
+
+        // Print ASCII
+        console.printString("  |");
+        var i: usize = 0;
+        while (i < byte_count) : (i += 1) {
+            printAsciiChar(sdump_ascii_buf[i]);
+        }
+        while (i < 16) : (i += 1) {
+            console.printChar(' ');
+        }
+        console.printString("|\n");
+
+        addr +%= 16;
         lines += 1;
 
-        // Pager: pause every N lines
-        if (lines >= lines_per_page and esp +% offset < stack_top) {
+        // Pager
+        if (lines >= lines_per_page and addr < stack_top) {
             console.printColored("  -- Press SPACE for more, Q to quit --", .{}, .dark_gray, .black);
             const key = waitForKey();
-            // Clear the prompt line
-            console.print("\r                                        \r", .{});
+            console.printString("\r                                        \r");
             if (key == 'q' or key == 'Q') {
-                console.print("\n", .{});
+                console.printChar('\n');
                 return;
             }
             lines = 0;
@@ -243,7 +293,7 @@ fn cmdStackDump() void {
     }
 
     console.printColored("  -- End of stack --\n", .{}, .dark_gray, .black);
-    console.print("\n", .{});
+    console.printChar('\n');
 }
 
 /// Wait for a keypress (blocking)
