@@ -1,53 +1,72 @@
-# Compiler and flags
+# Basic paths
 ZIG = zig
-BUILD_MODE = ReleaseSmall
-
-# Zig equivalent flags for GCC flags:
-# -fno-builtin         → Not applicable (Zig handles this differently)
-# -fno-exception       → Not applicable (Zig doesn't use exceptions)
-# -fno-stack-protector → -fno-stack-check
-# -fno-rtti            → Not applicable (Zig doesn't have RTTI)
-# -nostdlib            → -c (compile only, don't link) or using object files
-# -nodefaultlibs       → Minimal linking approach
-ZIG_FLAGS = -O $(BUILD_MODE) -fno-stack-check -fstrip -femit-bin=$(BIN)
-
-# Source and binary files
-SRC = main.zig
-BIN = main
+KERNEL_BIN = zig-out/bin/kernel.elf
+KERNEL_DST = boot/kernel
+ISO_DIR = isodir
+ISO_FILE = kernel.iso
 
 # Colors for output
 CYAN = \033[0;36m
 GREEN = \033[0;32m
+YELLOW = \033[0;33m
 RESET = \033[0m
 
-.PHONY: all re clean fclean help
+.PHONY: all build iso run re clean fclean help
 
-# Default target - compile the program
-all: $(BIN)
-	@echo "$(GREEN)✓ Build complete!$(RESET)"
+# Default target - build and stage kernel for GRUB 
+all: run
 
-# Direct compilation (most efficient for Zig)
-$(BIN): $(SRC)
-	@echo "$(CYAN)Building executable...$(RESET)"
-	$(ZIG) build-exe $(ZIG_FLAGS) $(SRC)
+build:
+	@echo "$(CYAN)Building kernel via build.zig...$(RESET)"
+	$(ZIG) build
+	@mkdir -p $(dir $(KERNEL_DST))
+	@if [ -d $(KERNEL_DST) ]; then rm -rf $(KERNEL_DST); fi
+	@cp $(KERNEL_BIN) $(KERNEL_DST)
+	@echo "$(GREEN)✓ Kernel ready at $(KERNEL_DST)!$(RESET)"
+
+# Create bootable ISO with GRUB
+iso: build
+	@echo "$(CYAN)Creating bootable ISO...$(RESET)"
+	@mkdir -p $(ISO_DIR)/boot/grub
+	@cp $(KERNEL_DST) $(ISO_DIR)/boot/
+	@cp boot/grub/grub.cfg $(ISO_DIR)/boot/grub/
+	@grub-mkrescue -o $(ISO_FILE) $(ISO_DIR)
+	@echo "$(GREEN)✓ Bootable ISO created: $(ISO_FILE)$(RESET)"
+
+# Run kernel in QEMU
+run: iso
+	@echo "$(CYAN)Starting QEMU...$(RESET)"
+	@qemu-system-i386 -cdrom $(ISO_FILE) -no-reboot -no-shutdown
+
+# Quick run without ISO (direct kernel boot)
+run-kernel: build
+	@echo "$(CYAN)Starting QEMU with direct kernel boot...$(RESET)"
+	@qemu-system-i386 -kernel $(KERNEL_BIN)
 
 # Rebuild - removes old files and rebuilds
 re: fclean all
 
-# Clean binary files
+# Clean staged artifacts (keeps zig-out cache)
 clean:
-	@echo "$(CYAN)Removing binary files...$(RESET)"
-	@rm -f $(BIN)
-	@rm -f zig-cache
+	@echo "$(CYAN)Removing staged kernel...$(RESET)"
+	@if [ -d $(KERNEL_DST) ]; then rm -rf $(KERNEL_DST); elif [ -f $(KERNEL_DST) ]; then rm -f $(KERNEL_DST); fi
+	@rm -rf $(ISO_DIR)
+	@rm -f $(ISO_FILE)
 
-# Full clean - remove everything (same as clean for now)
-fclean: clean
+# Full clean - remove everything Zig produced
+fclean: clean 
+	@rm -rf zig-out
+	@rm -rf zig-cache
+	@rm -rf .zig-cache
 
 # Help target
 help:
 	@echo "Available targets:"
-	@echo "  make      - Build the executable"
-	@echo "  make re   - Rebuild (clean and build)"
-	@echo "  make clean - Remove binary files"
-	@echo "  make fclean - Remove all generated files"
+	@echo "  make / make build    - Build with build.zig and copy to boot/kernel"
+	@echo "  make iso             - Build kernel and create bootable ISO"
+	@echo "  make run             - Build ISO and run in QEMU"
+	@echo "  make run-kernel      - Build and run kernel directly in QEMU (no ISO)"
+	@echo "  make re              - Clean and rebuild"
+	@echo "  make clean           - Remove staged files and ISO"
+	@echo "  make fclean          - Remove staged files, ISO, and Zig caches"
 

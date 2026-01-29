@@ -1,0 +1,196 @@
+// PS/2 Keyboard Driver
+// Handles keyboard input via interrupts
+
+const vga = @import("vga.zig");
+const isr = @import("../arch/isr.zig");
+const screen = @import("../io/screen.zig");
+const syslog = @import("../ui/syslog.zig");
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+const DATA_PORT: u16 = 0x60;
+const STATUS_PORT: u16 = 0x64;
+const OUTPUT_BUFFER_FULL: u8 = 0x01;
+const BUFFER_SIZE: usize = 128;
+
+// Special scancodes
+const SC_LEFT_SHIFT: u8 = 0x2A;
+const SC_RIGHT_SHIFT: u8 = 0x36;
+const SC_CAPS_LOCK: u8 = 0x3A;
+const SC_LEFT_CTRL: u8 = 0x1D;
+
+// Function keys (F1-F5 for screen switching)
+const SC_F1: u8 = 0x3B;
+const SC_F5: u8 = 0x3F;
+
+// ============================================================================
+// Scancode Tables (US QWERTY - Set 1)
+// ============================================================================
+
+const scancode_table = [_]u8{
+    0, 0x1B, '1', '2', '3', '4', '5', '6', // 0x00-0x07
+    '7', '8', '9', '0', '-', '=', '\x08', '\t', // 0x08-0x0F
+    'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', // 0x10-0x17
+    'o', 'p', '[', ']', '\n', 0, 'a', 's', // 0x18-0x1F
+    'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', // 0x20-0x27
+    '\'', '`', 0, '\\', 'z', 'x', 'c', 'v', // 0x28-0x2F
+    'b', 'n', 'm', ',', '.', '/', 0, '*', // 0x30-0x37
+    0, ' ', 0, 0, 0, 0, 0, 0, // 0x38-0x3F
+    0, 0, 0, 0, 0, 0, 0, 0, // 0x40-0x47
+    0, 0, 0, 0, 0, 0, 0, 0, // 0x48-0x4F
+    0, 0, 0, 0, 0, 0, 0, 0, // 0x50-0x57
+    0, 0, 0, 0, 0, 0, 0, 0, // 0x58-0x5F
+};
+
+const scancode_table_shifted = [_]u8{
+    0, 0x1B, '!', '@', '#', '$', '%', '^', // 0x00-0x07
+    '&', '*', '(', ')', '_', '+', '\x08', '\t', // 0x08-0x0F
+    'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', // 0x10-0x17
+    'O', 'P', '{', '}', '\n', 0, 'A', 'S', // 0x18-0x1F
+    'D', 'F', 'G', 'H', 'J', 'K', 'L', ':', // 0x20-0x27
+    '"', '~', 0, '|', 'Z', 'X', 'C', 'V', // 0x28-0x2F
+    'B', 'N', 'M', '<', '>', '?', 0, '*', // 0x30-0x37
+    0, ' ', 0, 0, 0, 0, 0, 0, // 0x38-0x3F
+    0, 0, 0, 0, 0, 0, 0, 0, // 0x40-0x47
+    0, 0, 0, 0, 0, 0, 0, 0, // 0x48-0x4F
+    0, 0, 0, 0, 0, 0, 0, 0, // 0x50-0x57
+    0, 0, 0, 0, 0, 0, 0, 0, // 0x58-0x5F
+};
+
+// ============================================================================
+// State
+// ============================================================================
+
+var shift_pressed: bool = false;
+var caps_lock: bool = false;
+var ctrl_pressed: bool = false;
+
+// Circular buffer for keyboard input
+var buffer: [BUFFER_SIZE]u8 = undefined;
+var buffer_head: usize = 0;
+var buffer_tail: usize = 0;
+
+// ============================================================================
+// Public API
+// ============================================================================
+
+/// Initialize keyboard driver
+pub fn init() void {
+    // Flush any pending scancodes
+    while ((vga.inb(STATUS_PORT) & OUTPUT_BUFFER_FULL) != 0) {
+        _ = vga.inb(DATA_PORT);
+    }
+
+    // Register keyboard IRQ handler (IRQ1)
+    isr.registerIrqHandler(1, keyboardIrqHandler);
+
+    syslog.ok("PS/2 keyboard driver loaded");
+}
+
+/// Get character from buffer (non-blocking)
+pub fn getChar() ?u8 {
+    if (buffer_head == buffer_tail) {
+        return null;
+    }
+    const char = buffer[buffer_tail];
+    buffer_tail = (buffer_tail + 1) % BUFFER_SIZE;
+    return char;
+}
+
+/// Check if there's input available
+pub fn hasInput() bool {
+    return buffer_head != buffer_tail;
+}
+
+/// Check modifier states
+pub fn isCtrlPressed() bool {
+    return ctrl_pressed;
+}
+
+pub fn isShiftPressed() bool {
+    return shift_pressed;
+}
+
+pub fn isCapsLockActive() bool {
+    return caps_lock;
+}
+
+// ============================================================================
+// IRQ Handler
+// ============================================================================
+
+fn keyboardIrqHandler(_: u8) void {
+    // Read scancode (must always read to acknowledge keyboard)
+    const scancode = vga.inb(DATA_PORT);
+
+    if (processScancode(scancode)) |char| {
+        // Add to buffer if not full
+        const next_head = (buffer_head + 1) % BUFFER_SIZE;
+        if (next_head != buffer_tail) {
+            buffer[buffer_head] = char;
+            buffer_head = next_head;
+        }
+    }
+}
+
+// Debug: check if handler is registered
+pub fn isInitialized() bool {
+    return isr.irq_handlers[1] != null;
+}
+
+// ============================================================================
+// Internal
+// ============================================================================
+
+fn processScancode(scancode: u8) ?u8 {
+    // Key release (bit 7 set)
+    if (scancode & 0x80 != 0) {
+        return handleKeyRelease(scancode & 0x7F);
+    }
+    return handleKeyPress(scancode);
+}
+
+fn handleKeyRelease(code: u8) ?u8 {
+    switch (code) {
+        SC_LEFT_SHIFT, SC_RIGHT_SHIFT => shift_pressed = false,
+        SC_LEFT_CTRL => ctrl_pressed = false,
+        else => {},
+    }
+    return null;
+}
+
+fn handleKeyPress(scancode: u8) ?u8 {
+    switch (scancode) {
+        SC_LEFT_SHIFT, SC_RIGHT_SHIFT => {
+            shift_pressed = true;
+            return null;
+        },
+        SC_CAPS_LOCK => {
+            caps_lock = !caps_lock;
+            return null;
+        },
+        SC_LEFT_CTRL => {
+            ctrl_pressed = true;
+            return null;
+        },
+        // F1-F5: Switch screens
+        SC_F1...SC_F5 => {
+            screen.switchTo(scancode - SC_F1);
+            return null;
+        },
+        else => {},
+    }
+
+    if (scancode >= scancode_table.len) {
+        return null;
+    }
+
+    const char = if (shift_pressed != caps_lock)
+        scancode_table_shifted[scancode]
+    else
+        scancode_table[scancode];
+
+    return if (char != 0) char else null;
+}
