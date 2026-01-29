@@ -41,11 +41,12 @@ pub fn section(comptime title: []const u8) void {
 }
 
 /// Log an info message
-pub fn info(comptime msg: []const u8) void {
+pub fn info(comptime fmt: []const u8, args: anytype) void {
     const current = screen.getActiveScreen();
     if (current != 0) screen.switchTo(0);
 
-    console.printColored("  " ++ msg ++ "\n", .{}, .light_green, .black);
+    console.printColored("  ", .{}, .light_green, .black);
+    console.printColored(fmt ++ "\n", args, .light_green, .black);
 
     if (current != 0) screen.switchTo(current);
 }

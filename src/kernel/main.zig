@@ -114,7 +114,7 @@ fn finishBoot() void {
     syslog.ok("Header bar enabled");
     syslog.ok("Interrupts enabled (sti)");
     syslog.newline();
-    syslog.info("System ready. Press F2 for terminal.");
+    syslog.info("System ready. Press F2 for terminal.", .{});
 }
 
 // ============================================================================
