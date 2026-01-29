@@ -177,7 +177,8 @@ fn handleKeyPress(scancode: u8) ?u8 {
         },
         // F1-F5: Switch screens
         SC_F1...SC_F5 => {
-            screen.switchTo(scancode - SC_F1);
+            const target_screen = scancode - SC_F1;
+            screen.switchTo(target_screen);
             return null;
         },
         else => {},

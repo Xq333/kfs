@@ -88,8 +88,10 @@ pub fn init() void {
     setEntry(2, 0, 0xFFFFFFFF, PRESENT | DPL_RING0 | SEGMENT | READ_WRITE, GRANULARITY_4K | SIZE_32BIT);
 
     // Entry 3: Kernel Stack segment
-    // base=0, limit=4GB, writable, ring 0, grows down
-    setEntry(3, 0, 0xFFFFFFFF, PRESENT | DPL_RING0 | SEGMENT | READ_WRITE | DIRECTION, GRANULARITY_4K | SIZE_32BIT);
+    // base=0, limit=4GB, writable, ring 0
+    // Note: In 32-bit flat model, stack segments are just data segments.
+    // "Expand-down" (DIRECTION) is problematic with 0-4GB limits.
+    setEntry(3, 0, 0xFFFFFFFF, PRESENT | DPL_RING0 | SEGMENT | READ_WRITE, GRANULARITY_4K | SIZE_32BIT);
 
     // Entry 4: User Code segment
     // base=0, limit=4GB, executable, readable, ring 3
@@ -100,8 +102,8 @@ pub fn init() void {
     setEntry(5, 0, 0xFFFFFFFF, PRESENT | DPL_RING3 | SEGMENT | READ_WRITE, GRANULARITY_4K | SIZE_32BIT);
 
     // Entry 6: User Stack segment
-    // base=0, limit=4GB, writable, ring 3, grows down
-    setEntry(6, 0, 0xFFFFFFFF, PRESENT | DPL_RING3 | SEGMENT | READ_WRITE | DIRECTION, GRANULARITY_4K | SIZE_32BIT);
+    // base=0, limit=4GB, writable, ring 3
+    setEntry(6, 0, 0xFFFFFFFF, PRESENT | DPL_RING3 | SEGMENT | READ_WRITE, GRANULARITY_4K | SIZE_32BIT);
 
     // Set up GDT pointer
     gdt_ptr.* = .{
