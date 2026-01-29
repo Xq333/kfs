@@ -4,6 +4,7 @@
 const vga = @import("../drivers/vga.zig");
 const buffer = @import("buffer.zig");
 const header = @import("header.zig");
+const stack_viewer = @import("../ui/stack.zig");
 
 pub const SCREEN_COUNT: usize = 5;
 
@@ -73,6 +74,14 @@ fn saveCurrentScreen() void {
 /// Load current screen to VGA buffer
 fn loadCurrentScreen() void {
     const vga_buffer = @as([*]volatile u16, @ptrFromInt(vga.BUFFER_ADDR));
+
+    // For dynamic screens (like stack viewer), redraw fresh instead of restoring
+    if (active_screen == 2) {
+        // Redraw header first, then the dynamic content
+        header.draw();
+        stack_viewer.draw();
+        return;
+    }
 
     // Restore buffer content
     for (0..vga.SIZE) |i| {

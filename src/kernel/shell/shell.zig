@@ -2,9 +2,9 @@
 // Commands: help, clear, stack, reboot, halt, echo, gdt, time
 
 const console = @import("../io/console.zig");
-const screen = @import("../io/screen.zig");
-const stack_viewer = @import("../ui/stack.zig");
+const kstack = @import("../arch/stack.zig");
 const gdt = @import("../arch/gdt.zig");
+const keyboard = @import("../drivers/keyboard.zig");
 
 const MAX_CMD_LEN: usize = 64;
 
@@ -59,6 +59,8 @@ pub fn execute() void {
         cmdGdt();
     } else if (strEql(parsed.cmd, "info")) {
         cmdInfo();
+    } else if (strEql(parsed.cmd, "sdump")) {
+        cmdStackDump();
     } else if (parsed.cmd.len > 0) {
         console.printColored("  Unknown command: ", .{}, .light_red, .black);
         printStr(parsed.cmd);
@@ -102,6 +104,7 @@ fn cmdHelp() void {
     console.print("    help   - Show this help message\n", .{});
     console.print("    clear  - Clear the terminal screen\n", .{});
     console.print("    stack  - Print kernel stack information\n", .{});
+    console.print("    sdump  - Dump entire kernel stack memory\n", .{});
     console.print("    gdt    - Show GDT information\n", .{});
     console.print("    info   - Show system information\n", .{});
     console.print("    echo   - Echo text back\n", .{});
@@ -126,7 +129,9 @@ fn cmdStack() void {
     console.print("    Frame: 0x", .{});
     printHex32(frame_addr);
     console.print("\n", .{});
-    console.print("    Stack size: 16384 bytes\n", .{});
+    console.print("    Stack size: ", .{});
+    printDec(kstack.STACK_SIZE);
+    console.print(" bytes\n", .{});
     console.print("\n", .{});
     console.printColored("  (See F3 for detailed stack view)\n", .{}, .dark_gray, .black);
     console.print("\n", .{});
@@ -135,8 +140,12 @@ fn cmdStack() void {
 fn cmdGdt() void {
     console.print("\n", .{});
     console.printColored("  GDT Information:\n", .{}, .yellow, .black);
-    console.print("    Address: 0x00000800\n", .{});
-    console.print("    Entries: 7\n", .{});
+    console.print("    Address: 0x", .{});
+    printHex32(gdt.gdtBaseAddr());
+    console.print("\n", .{});
+    console.print("    Entries: ", .{});
+    printDec(gdt.GDT_SIZE);
+    console.print("\n", .{});
     console.print("\n", .{});
     console.printColored("  Segments:\n", .{}, .yellow, .black);
     console.print("    0x00 - Null descriptor\n", .{});
@@ -158,6 +167,106 @@ fn cmdInfo() void {
     console.print("    Video:   VGA 80x25\n", .{});
     console.print("    Screens: 5 (F1-F5)\n", .{});
     console.print("\n", .{});
+}
+
+fn cmdStackDump() void {
+    console.print("\n", .{});
+    console.printColored("  Kernel Stack Dump:\n", .{}, .yellow, .black);
+
+    // Get current frame address as ESP estimate
+    const esp: u32 = @truncate(@frameAddress());
+
+    const stack_bottom = kstack.stackBottomAddr();
+    const stack_top = kstack.stackTopAddr();
+
+    console.print("  ESP:  0x", .{});
+    printHex32(esp);
+    console.print("\n", .{});
+    console.print("  Top:  0x", .{});
+    printHex32(stack_top);
+    console.print("\n", .{});
+    console.print("  Bot:  0x", .{});
+    printHex32(stack_bottom);
+    console.print("\n\n", .{});
+
+    // Dump stack memory with paging
+    console.printColored("  Offset   Address     Value      ASCII\n", .{}, .cyan, .black);
+    console.print("  ------------------------------------------\n", .{});
+
+    var offset: u32 = 0;
+    var lines: u32 = 0;
+    const lines_per_page: u32 = 14; // Lines before prompting
+
+    while (esp +% offset < stack_top) {
+        const addr = esp +% offset;
+
+        // Print offset
+        console.print("  +", .{});
+        printHex8(@truncate(offset));
+        console.print("    0x", .{});
+        printHex32(addr);
+        console.print("  ", .{});
+
+        // Read and print value
+        const ptr: *const u32 = @ptrFromInt(addr);
+        const val = ptr.*;
+        printHex32(val);
+        console.print("   |", .{});
+
+        // ASCII for 4 bytes
+        const b0: u8 = @truncate(val);
+        const b1: u8 = @truncate(val >> 8);
+        const b2: u8 = @truncate(val >> 16);
+        const b3: u8 = @truncate(val >> 24);
+
+        printAsciiChar(b0);
+        printAsciiChar(b1);
+        printAsciiChar(b2);
+        printAsciiChar(b3);
+        console.print("|\n", .{});
+
+        offset += 4;
+        lines += 1;
+
+        // Pager: pause every N lines
+        if (lines >= lines_per_page and esp +% offset < stack_top) {
+            console.printColored("  -- Press SPACE for more, Q to quit --", .{}, .dark_gray, .black);
+            const key = waitForKey();
+            // Clear the prompt line
+            console.print("\r                                        \r", .{});
+            if (key == 'q' or key == 'Q') {
+                console.print("\n", .{});
+                return;
+            }
+            lines = 0;
+        }
+    }
+
+    console.printColored("  -- End of stack --\n", .{}, .dark_gray, .black);
+    console.print("\n", .{});
+}
+
+/// Wait for a keypress (blocking)
+fn waitForKey() u8 {
+    // Clear any pending input
+    while (keyboard.getChar()) |_| {}
+
+    // Wait for new input
+    while (true) {
+        if (keyboard.getChar()) |c| {
+            return c;
+        }
+        // Halt until next interrupt
+        asm volatile ("hlt");
+    }
+}
+
+fn printAsciiChar(b: u8) void {
+    if (b >= 0x20 and b < 0x7F) {
+        console.printChar(b);
+    } else {
+        console.printChar('.');
+    }
 }
 
 fn cmdEcho(args: []const u8) void {
@@ -276,4 +385,27 @@ fn printHex8(value: u8) void {
 
 fn printHexNibble(nibble: u4) void {
     console.printChar(HEX_CHARS[nibble]);
+}
+
+fn printDec(value: usize) void {
+    if (value == 0) {
+        console.printChar('0');
+        return;
+    }
+    // Find the highest power of 10 <= value
+    var divisor: usize = 1;
+    var temp = value;
+    while (temp >= 10) {
+        divisor *= 10;
+        temp /= 10;
+    }
+    // Print digits from most significant to least
+    var v = value;
+    while (divisor > 0) {
+        const digit: u8 = @truncate(v / divisor);
+        console.printChar('0' + digit);
+        v = v % divisor;
+        if (divisor == 1) break;
+        divisor /= 10;
+    }
 }

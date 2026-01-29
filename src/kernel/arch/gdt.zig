@@ -1,6 +1,6 @@
 // Global Descriptor Table (GDT)
 // Defines memory segments for protected mode
-// GDT is placed at fixed address 0x00000800 as required by specification
+// GDT is placed in kernel-owned .bss section
 
 const syslog = @import("../ui/syslog.zig");
 const console = @import("../io/console.zig");
@@ -26,9 +26,6 @@ pub const GdtPtr = packed struct {
 // ============================================================================
 // Constants
 // ============================================================================
-
-/// GDT is placed at this fixed memory address
-pub const GDT_BASE_ADDR: u32 = 0x00000800;
 
 /// Number of GDT entries:
 /// 0: Null descriptor
@@ -62,14 +59,19 @@ pub const USER_DATA_SEL: u16 = 0x2B; // Entry 5 | RPL 3
 pub const USER_STACK_SEL: u16 = 0x33; // Entry 6 | RPL 3
 
 // ============================================================================
-// State (GDT placed at fixed address 0x00000800)
+// State (GDT placed in kernel-owned .bss section)
 // ============================================================================
 
-/// Pointer to GDT at fixed address 0x00000800
-const gdt: *[GDT_SIZE]GdtEntry = @ptrFromInt(GDT_BASE_ADDR);
+/// GDT entries array in kernel .bss
+var gdt: [GDT_SIZE]GdtEntry align(8) = undefined;
 
-/// GDT pointer structure (placed right after GDT entries)
-const gdt_ptr: *GdtPtr = @ptrFromInt(GDT_BASE_ADDR + @sizeOf([GDT_SIZE]GdtEntry));
+/// GDT pointer structure
+var gdt_ptr: GdtPtr = undefined;
+
+/// Returns the base address of the GDT
+pub fn gdtBaseAddr() u32 {
+    return @intFromPtr(&gdt);
+}
 
 // ============================================================================
 // Public API
@@ -106,20 +108,20 @@ pub fn init() void {
     setEntry(6, 0, 0xFFFFFFFF, PRESENT | DPL_RING3 | SEGMENT | READ_WRITE, GRANULARITY_4K | SIZE_32BIT);
 
     // Set up GDT pointer
-    gdt_ptr.* = .{
+    gdt_ptr = .{
         .limit = @sizeOf([GDT_SIZE]GdtEntry) - 1,
-        .base = GDT_BASE_ADDR,
+        .base = @intFromPtr(&gdt),
     };
 
     // Load GDT into CPU
     loadGdt();
 
-    syslog.ok("GDT loaded at 0x00000800 (7 entries)");
+    syslog.ok("GDT initialized (7 entries)");
 }
 
 /// Returns the GDT pointer structure for debugging
 pub fn getGdtPtr() GdtPtr {
-    return gdt_ptr.*;
+    return gdt_ptr;
 }
 
 /// Returns a GDT entry by index for debugging
@@ -219,8 +221,8 @@ fn loadGdt() void {
         \\ movw $0x18, %%ax
         \\ movw %%ax, %%ss
         :
-        : [gdt_ptr] "r" (gdt_ptr),
-    );
+        : [gdt_ptr] "r" (&gdt_ptr),
+        : .{ .eax = true, .memory = true });
 }
 
 // ============================================================================
@@ -231,7 +233,7 @@ fn loadGdt() void {
 pub fn printGdtInfo() void {
     console.print("\n", .{});
     console.printColored("=== GDT Information ===\n", .{}, .cyan, .black);
-    console.print("GDT Base Address: 0x{X:0>8}\n", .{GDT_BASE_ADDR});
+    console.print("GDT Base Address: 0x{X:0>8}\n", .{gdtBaseAddr()});
     console.print("GDT Size:         {d} entries ({d} bytes)\n", .{ GDT_SIZE, @sizeOf([GDT_SIZE]GdtEntry) });
     console.print("\n", .{});
 

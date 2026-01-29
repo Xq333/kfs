@@ -3,6 +3,7 @@
 // Uses direct VGA writes to avoid heavy formatting machinery
 
 const kstack = @import("../arch/stack.zig");
+const gdt = @import("../arch/gdt.zig");
 
 const VGA_CYAN: u8 = 0x0B;
 const VGA_YELLOW: u8 = 0x0E;
@@ -107,10 +108,15 @@ pub fn draw() void {
     writeHex32At(vga_ptr, 19, 51, stack_top, VGA_GREEN);
     writeStringAt(vga_ptr, 20, 44, "Used:", VGA_GRAY);
     writeDecAt(vga_ptr, 20, 50, stack_used, VGA_GREEN);
-    writeStringAt(vga_ptr, 20, 56, "/ 16384", VGA_DARK_GRAY);
+    writeStringAt(vga_ptr, 20, 56, "/ ", VGA_DARK_GRAY);
+    writeDecAt(vga_ptr, 20, 58, kstack.STACK_SIZE, VGA_DARK_GRAY);
 
-    // Row 22: GDT summary
-    writeStringAt(vga_ptr, 22, 2, "GDT: 7 entries at 0x00000800", VGA_GRAY);
+    // Row 22: GDT summary (cache address to avoid repeated function calls)
+    const gdt_addr = gdt.gdtBaseAddr();
+    writeStringAt(vga_ptr, 22, 2, "GDT: ", VGA_GRAY);
+    writeDecAt(vga_ptr, 22, 7, gdt.GDT_SIZE, VGA_GRAY);
+    writeStringAt(vga_ptr, 22, 9, "entries at 0x", VGA_GRAY);
+    writeHex32At(vga_ptr, 22, 22, gdt_addr, VGA_GRAY);
 
     // Footer
     writeStringAt(vga_ptr, 24, 2, "Press F1-F5 to switch screens", VGA_DARK_GRAY);
