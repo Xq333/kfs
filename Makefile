@@ -36,7 +36,7 @@ iso: build
 # Run kernel in QEMU
 run: iso
 	@echo "$(CYAN)Starting QEMU...$(RESET)"
-	@qemu-system-i386 -cdrom $(ISO_FILE) -no-reboot -no-shutdown
+	@qemu-system-i386 -cdrom $(ISO_FILE)
 
 # Quick run without ISO (direct kernel boot)
 run-kernel: build

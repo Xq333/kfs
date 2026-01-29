@@ -152,15 +152,7 @@ noinline fn kmain() callconv(.c) noreturn {
         while (keyboard.getChar()) |char| {
             // Only accept keyboard input on Terminal screen (F2)
             if (screen.getActiveScreen() == 1) {
-                // Block backspace at prompt position
-                if (char == '\x08' and !terminal.canBackspace()) {
-                    continue;
-                }
-                console.printChar(char);
-                // Print new prompt after Enter
-                if (char == '\n') {
-                    terminal.printPrompt();
-                }
+                terminal.handleChar(char);
             }
         }
     }
