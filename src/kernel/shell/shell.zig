@@ -43,34 +43,34 @@ pub fn execute() void {
     console.printChar('2');
 
     // Parse command and arguments
-    const parsed = parseCommand(cmd);
+    parseCommand(cmd);
 
     console.printChar('3');
 
     console.printChar('4');
-    if (strEql(parsed.cmd, "help")) {
+    if (strEql(g_parsed_cmd, "help")) {
         console.printChar('H');
         cmdHelp();
-    } else if (strEql(parsed.cmd, "clear")) {
+    } else if (strEql(g_parsed_cmd, "clear")) {
         cmdClear();
-    } else if (strEql(parsed.cmd, "stack")) {
+    } else if (strEql(g_parsed_cmd, "stack")) {
         cmdStack();
-    } else if (strEql(parsed.cmd, "reboot")) {
+    } else if (strEql(g_parsed_cmd, "reboot")) {
         cmdReboot();
-    } else if (strEql(parsed.cmd, "halt")) {
+    } else if (strEql(g_parsed_cmd, "halt")) {
         cmdHalt();
-    } else if (strEql(parsed.cmd, "echo")) {
-        cmdEcho(parsed.args);
-    } else if (strEql(parsed.cmd, "gdt")) {
+    } else if (strEql(g_parsed_cmd, "echo")) {
+        cmdEcho(g_parsed_args);
+    } else if (strEql(g_parsed_cmd, "gdt")) {
         cmdGdt();
-    } else if (strEql(parsed.cmd, "info")) {
+    } else if (strEql(g_parsed_cmd, "info")) {
         cmdInfo();
-    } else if (strEql(parsed.cmd, "sdump")) {
+    } else if (strEql(g_parsed_cmd, "sdump")) {
         cmdStackDump();
-    } else if (parsed.cmd.len > 0) {
+    } else if (g_parsed_cmd.len > 0) {
         console.printChar('?');
         console.printColored("  Unknown command: ", .{}, .light_red, .black);
-        printStr(parsed.cmd);
+        printStr(g_parsed_cmd);
         console.print("\n", .{});
         console.printColored("  Type 'help' for available commands.\n", .{}, .dark_gray, .black);
     }
@@ -82,7 +82,11 @@ const ParsedCommand = struct {
     args: []const u8,
 };
 
-fn parseCommand(input: []const u8) ParsedCommand {
+// Global parsed command to avoid struct return issues
+var g_parsed_cmd: []const u8 = &[_]u8{};
+var g_parsed_args: []const u8 = &[_]u8{};
+
+fn parseCommand(input: []const u8) void {
     console.printChar('a');
     // Skip leading spaces
     var start: usize = 0;
@@ -94,7 +98,7 @@ fn parseCommand(input: []const u8) ParsedCommand {
     while (end < input.len and input[end] != ' ') : (end += 1) {}
 
     console.printChar('c');
-    const cmd = if (start < end) input[start..end] else input[0..0];
+    g_parsed_cmd = if (start < end) input[start..end] else input[0..0];
 
     console.printChar('d');
     // Skip spaces after command
@@ -102,10 +106,9 @@ fn parseCommand(input: []const u8) ParsedCommand {
     while (args_start < input.len and input[args_start] == ' ') : (args_start += 1) {}
 
     console.printChar('e');
-    const args = if (args_start < input.len) input[args_start..] else input[0..0];
+    g_parsed_args = if (args_start < input.len) input[args_start..] else input[0..0];
 
     console.printChar('f');
-    return .{ .cmd = cmd, .args = args };
 }
 
 // ============================================================================
