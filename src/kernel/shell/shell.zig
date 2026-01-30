@@ -34,13 +34,22 @@ pub fn execute() void {
         return;
     }
 
+    // DEBUG: Mark that we entered execute with a command
+    console.printChar('1');
+
     const cmd = cmd_buffer[0..cmd_len];
     cmd_len = 0;
+
+    console.printChar('2');
 
     // Parse command and arguments
     const parsed = parseCommand(cmd);
 
+    console.printChar('3');
+
+    console.printChar('4');
     if (strEql(parsed.cmd, "help")) {
+        console.printChar('H');
         cmdHelp();
     } else if (strEql(parsed.cmd, "clear")) {
         cmdClear();
@@ -59,11 +68,13 @@ pub fn execute() void {
     } else if (strEql(parsed.cmd, "sdump")) {
         cmdStackDump();
     } else if (parsed.cmd.len > 0) {
+        console.printChar('?');
         console.printColored("  Unknown command: ", .{}, .light_red, .black);
         printStr(parsed.cmd);
         console.print("\n", .{});
         console.printColored("  Type 'help' for available commands.\n", .{}, .dark_gray, .black);
     }
+    console.printChar('!');
 }
 
 const ParsedCommand = struct {
