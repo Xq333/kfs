@@ -59,18 +59,21 @@ pub const USER_DATA_SEL: u16 = 0x2B; // Entry 5 | RPL 3
 pub const USER_STACK_SEL: u16 = 0x33; // Entry 6 | RPL 3
 
 // ============================================================================
-// State (GDT placed in kernel-owned .bss section)
+// State (GDT placed at fixed address 0x00000800)
 // ============================================================================
 
-/// GDT entries array in kernel .bss
-var gdt: [GDT_SIZE]GdtEntry align(8) = undefined;
+/// Fixed GDT base address
+pub const GDT_BASE_ADDR: u32 = 0x00000800;
+
+/// GDT entries array at fixed address
+var gdt: *[GDT_SIZE]GdtEntry = @ptrFromInt(GDT_BASE_ADDR);
 
 /// GDT pointer structure
 var gdt_ptr: GdtPtr = undefined;
 
 /// Returns the base address of the GDT
 pub fn gdtBaseAddr() u32 {
-    return @intFromPtr(&gdt);
+    return GDT_BASE_ADDR;
 }
 
 // ============================================================================
@@ -110,7 +113,7 @@ pub fn init() void {
     // Set up GDT pointer
     gdt_ptr = .{
         .limit = @sizeOf([GDT_SIZE]GdtEntry) - 1,
-        .base = @intFromPtr(&gdt),
+        .base = GDT_BASE_ADDR,
     };
 
     // Load GDT into CPU
