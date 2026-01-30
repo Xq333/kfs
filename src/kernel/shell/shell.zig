@@ -34,22 +34,13 @@ pub fn execute() void {
         return;
     }
 
-    // DEBUG: Mark that we entered execute with a command
-    console.printChar('1');
-
     const cmd = cmd_buffer[0..cmd_len];
     cmd_len = 0;
 
-    console.printChar('2');
-
-    // Parse command and arguments
+    // Parse command and arguments (uses globals to avoid struct return issues)
     parseCommand(cmd);
 
-    console.printChar('3');
-
-    console.printChar('4');
     if (strEql(g_parsed_cmd, "help")) {
-        console.printChar('H');
         cmdHelp();
     } else if (strEql(g_parsed_cmd, "clear")) {
         cmdClear();
@@ -68,47 +59,33 @@ pub fn execute() void {
     } else if (strEql(g_parsed_cmd, "sdump")) {
         cmdStackDump();
     } else if (g_parsed_cmd.len > 0) {
-        console.printChar('?');
         console.printColored("  Unknown command: ", .{}, .light_red, .black);
         printStr(g_parsed_cmd);
         console.print("\n", .{});
         console.printColored("  Type 'help' for available commands.\n", .{}, .dark_gray, .black);
     }
-    console.printChar('!');
 }
 
-const ParsedCommand = struct {
-    cmd: []const u8,
-    args: []const u8,
-};
-
-// Global parsed command to avoid struct return issues
+// Global parsed command storage (avoids struct return issues on some QEMU versions)
 var g_parsed_cmd: []const u8 = &[_]u8{};
 var g_parsed_args: []const u8 = &[_]u8{};
 
 fn parseCommand(input: []const u8) void {
-    console.printChar('a');
     // Skip leading spaces
     var start: usize = 0;
     while (start < input.len and input[start] == ' ') : (start += 1) {}
 
-    console.printChar('b');
     // Find end of command (first space or end)
     var end: usize = start;
     while (end < input.len and input[end] != ' ') : (end += 1) {}
 
-    console.printChar('c');
     g_parsed_cmd = if (start < end) input[start..end] else input[0..0];
 
-    console.printChar('d');
     // Skip spaces after command
     var args_start: usize = end;
     while (args_start < input.len and input[args_start] == ' ') : (args_start += 1) {}
 
-    console.printChar('e');
     g_parsed_args = if (args_start < input.len) input[args_start..] else input[0..0];
-
-    console.printChar('f');
 }
 
 // ============================================================================
