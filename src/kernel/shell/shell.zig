@@ -83,22 +83,28 @@ const ParsedCommand = struct {
 };
 
 fn parseCommand(input: []const u8) ParsedCommand {
+    console.printChar('a');
     // Skip leading spaces
     var start: usize = 0;
     while (start < input.len and input[start] == ' ') : (start += 1) {}
 
+    console.printChar('b');
     // Find end of command (first space or end)
     var end: usize = start;
     while (end < input.len and input[end] != ' ') : (end += 1) {}
 
+    console.printChar('c');
     const cmd = if (start < end) input[start..end] else input[0..0];
 
+    console.printChar('d');
     // Skip spaces after command
     var args_start: usize = end;
     while (args_start < input.len and input[args_start] == ' ') : (args_start += 1) {}
 
+    console.printChar('e');
     const args = if (args_start < input.len) input[args_start..] else input[0..0];
 
+    console.printChar('f');
     return .{ .cmd = cmd, .args = args };
 }
 
