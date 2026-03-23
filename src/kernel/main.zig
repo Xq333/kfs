@@ -3,15 +3,17 @@ const keyboard = @import("drivers/keyboard.zig");
 const screen = @import("io/screen.zig");
 const header = @import("io/header.zig");
 const gdt = @import("arch/gdt.zig");
+const kstack = @import("arch/stack.zig");
 const idt = @import("arch/idt.zig");
 const pic = @import("arch/pic.zig");
+pub const panic = @import("panic.zig").panic;
 
 // UI screens
 const syslog = @import("ui/syslog.zig");
 const terminal = @import("ui/terminal.zig");
 const help = @import("ui/help.zig");
 const about = @import("ui/about.zig");
-const empty = @import("ui/empty.zig");
+const stack = @import("ui/stack.zig");
 
 // ============================================================================
 // Multiboot Header
@@ -37,15 +39,13 @@ export var multiboot: MultibootHeader align(4) linksection(".multiboot") = .{
 // Stack
 // ============================================================================
 
-var stack_bytes: [16 * 1024]u8 align(16) linksection(".bss") = undefined;
-
 export fn _start() callconv(.naked) noreturn {
     asm volatile (
         \\ movl %[stack_top], %%esp
         \\ movl %%esp, %%ebp
         \\ call %[kmain:P]
         :
-        : [stack_top] "i" (&@as([*]align(16) u8, @ptrCast(&stack_bytes))[stack_bytes.len]),
+        : [stack_top] "i" (&@as([*]align(16) u8, @ptrCast(&kstack.stack_bytes))[kstack.STACK_SIZE]),
           [kmain] "X" (&kmain),
     );
 }
@@ -92,9 +92,9 @@ fn setupScreens() void {
     screen.switchTo(1);
     terminal.draw();
 
-    // Screen 2 (F3): Empty placeholder
+    // Screen 2 (F3): Stack Viewer
     screen.switchTo(2);
-    empty.draw();
+    stack.draw();
 
     // Screen 3 (F4): Help
     screen.switchTo(3);
@@ -114,7 +114,7 @@ fn finishBoot() void {
     syslog.ok("Header bar enabled");
     syslog.ok("Interrupts enabled (sti)");
     syslog.newline();
-    syslog.info("System ready. Press F2 for terminal.");
+    syslog.info("System ready. Press F2 for terminal.", .{});
 }
 
 // ============================================================================
@@ -152,15 +152,7 @@ noinline fn kmain() callconv(.c) noreturn {
         while (keyboard.getChar()) |char| {
             // Only accept keyboard input on Terminal screen (F2)
             if (screen.getActiveScreen() == 1) {
-                // Block backspace at prompt position
-                if (char == '\x08' and !terminal.canBackspace()) {
-                    continue;
-                }
-                console.printChar(char);
-                // Print new prompt after Enter
-                if (char == '\n') {
-                    terminal.printPrompt();
-                }
+                terminal.handleChar(char);
             }
         }
     }

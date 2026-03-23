@@ -37,14 +37,14 @@ pkgs.mkShell {
     # QEMU for testing
     qemu
 
-    # Debugging tools
-    gdb
-
     # Other utilities
     coreutils
   ] ++ pkgs.lib.optionals pkgs.stdenv.isLinux [
     # Native GRUB on Linux
     grub2
+    
+    # GDB (only on Linux - macOS cross-arch debugging is complex)
+    gdb
   ] ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [
     # Docker-based GRUB wrapper for macOS
     grubMkrescueWrapper

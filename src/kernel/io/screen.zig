@@ -4,6 +4,7 @@
 const vga = @import("../drivers/vga.zig");
 const buffer = @import("buffer.zig");
 const header = @import("header.zig");
+const stack_viewer = @import("../ui/stack.zig");
 
 pub const SCREEN_COUNT: usize = 5;
 
@@ -39,17 +40,20 @@ pub fn init() void {
 /// Switch to a different screen (0-4 for F1-F5)
 pub fn switchTo(screen_num: usize) void {
     if (screen_num >= SCREEN_COUNT) return;
-    if (screen_num == active_screen) return;
     if (!initialized) return;
 
-    // Save current VGA buffer and cursor to old screen
-    saveCurrentScreen();
+    const is_switching = (screen_num != active_screen);
 
-    // Switch active screen
-    active_screen = screen_num;
+    if (is_switching) {
+        // Save current VGA buffer and cursor to old screen
+        saveCurrentScreen();
 
-    // Load new screen to VGA buffer
-    loadCurrentScreen();
+        // Switch active screen
+        active_screen = screen_num;
+
+        // Load new screen to VGA buffer
+        loadCurrentScreen();
+    }
 }
 
 /// Save VGA buffer content to current screen
@@ -70,6 +74,14 @@ fn saveCurrentScreen() void {
 /// Load current screen to VGA buffer
 fn loadCurrentScreen() void {
     const vga_buffer = @as([*]volatile u16, @ptrFromInt(vga.BUFFER_ADDR));
+
+    // For dynamic screens (like stack viewer), redraw fresh instead of restoring
+    if (active_screen == 2) {
+        // Redraw header first, then the dynamic content
+        header.draw();
+        stack_viewer.draw();
+        return;
+    }
 
     // Restore buffer content
     for (0..vga.SIZE) |i| {

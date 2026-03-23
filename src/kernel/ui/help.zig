@@ -17,7 +17,7 @@ pub fn draw() void {
     console.print(" - Terminal (interactive shell)\n", .{});
 
     console.printColored("    F3", .{}, .yellow, .black);
-    console.print(" - (not implemented yet)\n", .{});
+    console.print(" - Kernel Stack Viewer\n", .{});
 
     console.printColored("    F4", .{}, .yellow, .black);
     console.print(" - This help screen\n", .{});
@@ -25,15 +25,32 @@ pub fn draw() void {
     console.printColored("    F5", .{}, .yellow, .black);
     console.print(" - About sobOS\n", .{});
 
-    console.print("\n  Note: Keyboard input only works on F2 (Terminal).\n", .{});
+    console.print("\n  Shell Commands (F2):\n\n", .{});
 
-    console.print("\n  Terminal Keys:\n\n", .{});
-    console.printColored("    Enter", .{}, .yellow, .black);
-    console.print("     - New line\n", .{});
-    console.printColored("    Backspace", .{}, .yellow, .black);
-    console.print(" - Delete character\n", .{});
-    console.printColored("    Shift", .{}, .yellow, .black);
-    console.print("     - Uppercase / symbols\n", .{});
-    console.printColored("    Caps Lock", .{}, .yellow, .black);
-    console.print(" - Toggle caps\n", .{});
+    console.printColored("    help", .{}, .light_green, .black);
+    console.print("   - Show available commands\n", .{});
+
+    console.printColored("    clear", .{}, .light_green, .black);
+    console.print("  - Clear terminal screen\n", .{});
+
+    console.printColored("    stack", .{}, .light_green, .black);
+    console.print("  - Print kernel stack info\n", .{});
+
+    console.printColored("    gdt", .{}, .light_green, .black);
+    console.print("    - Show GDT segments\n", .{});
+
+    console.printColored("    info", .{}, .light_green, .black);
+    console.print("   - System information\n", .{});
+
+    console.printColored("    echo", .{}, .light_green, .black);
+    console.print("   - Echo text back\n", .{});
+
+    console.printColored("    reboot", .{}, .light_green, .black);
+    console.print(" - Reboot the system\n", .{});
+
+    console.printColored("    halt", .{}, .light_green, .black);
+    console.print("   - Halt the CPU\n", .{});
+
+    console.printColored("    sdump", .{}, .light_green, .black);
+    console.print("  - Dump entire kernel stack memory\n", .{});
 }

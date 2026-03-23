@@ -24,19 +24,20 @@ build:
 	@cp $(KERNEL_BIN) $(KERNEL_DST)
 	@echo "$(GREEN)✓ Kernel ready at $(KERNEL_DST)!$(RESET)"
 
-# Create bootable ISO with GRUB
+# Create bootable ISO with GRUB (via Docker)
 iso: build
 	@echo "$(CYAN)Creating bootable ISO...$(RESET)"
 	@mkdir -p $(ISO_DIR)/boot/grub
 	@cp $(KERNEL_DST) $(ISO_DIR)/boot/
 	@cp boot/grub/grub.cfg $(ISO_DIR)/boot/grub/
-	@grub-mkrescue -o $(ISO_FILE) $(ISO_DIR)
+	@docker run --rm --platform linux/amd64 -v "$(PWD)":/work -w /work debian:bookworm sh -c \
+		"apt-get update -qq && apt-get install -qq -y grub-pc-bin xorriso mtools grub-common >/dev/null 2>&1 && grub-mkrescue -o $(ISO_FILE) $(ISO_DIR)"
 	@echo "$(GREEN)✓ Bootable ISO created: $(ISO_FILE)$(RESET)"
 
 # Run kernel in QEMU
 run: iso
 	@echo "$(CYAN)Starting QEMU...$(RESET)"
-	@qemu-system-i386 -cdrom $(ISO_FILE) -no-reboot -no-shutdown
+	@qemu-system-i386 -cdrom $(ISO_FILE)
 
 # Quick run without ISO (direct kernel boot)
 run-kernel: build

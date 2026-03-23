@@ -9,7 +9,7 @@ const screen = @import("screen.zig");
 pub const screen_names = [screen.SCREEN_COUNT][]const u8{
     "F1: System",
     "F2: Terminal",
-    "F3: ???",
+    "F3: Stack",
     "F4: Help",
     "F5: About",
 };
